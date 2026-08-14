@@ -1,0 +1,34 @@
+# Pinning is deliberately deferred until the first working vertical slice.
+
+# API
+fastapi
+uvicorn[standard]
+
+# Orchestration
+langgraph
+langchain
+
+# Observability
+langfuse
+
+# Datastores
+psycopg[binary]
+pgvector
+redis
+
+# Config
+pydantic-settings
+
+# Auth (Phase 4): JWT signing and verification
+pyjwt
+
+# LLM providers
+google-generativeai
+groq
+
+# Retrieval
+rank-bm25
+flashrank
+
+# Agent interop
+a2a-sdk
