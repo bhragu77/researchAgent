@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Node / web
+node_modules/
+web/dist/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+
+# Runtime logs / generated indexes -- regenerable via `scripts.ingest`, not source
+*.log
+data/indexes/*.pkl
+data/eval_cache/
+data/eval/online_failures.jsonl
+
+# Local tool state, not project source
+.claude/
