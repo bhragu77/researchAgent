@@ -1,12 +1,33 @@
-# Render Blueprint for the two-process stack (see deploy/docker-compose.yml
-# for the equivalent VM shape). Postgres and Redis are NOT defined here on
-# purpose -- the app already targets Neon (Postgres) and Upstash (Redis) as
-# external, unmanaged datastores; Render never sees them.
+# Render Blueprint: single free web service, no A2A agent.
 #
-# Usage: push this file to the repo root, then in the Render dashboard choose
-# "New +" -> "Blueprint" and point it at this repo. Render creates both
-# services below; you then fill in the secret env vars flagged `sync: false`
-# in each service's Environment tab (Render will prompt for them).
+# The full architecture (deploy/docker-compose.yml, and the fuller version of
+# this file in git history) runs the external-research agent as its own
+# process on a private service, so it can't be hit directly and spend the
+# search budget. That needs a paid instance type -- Render's free plan
+# supports neither Private Services nor enough memory to comfortably run a
+# second model-resident process alongside this one.
+#
+# This version trades that away for $0/month: EXTERNAL_AGENT_URL is left
+# unset, so it defaults to a loopback address nothing is listening on.
+# app/orchestration/nodes/manager.py already treats a failed external-agent
+# call as "this one sub-question found no evidence" rather than a hard
+# failure (see `except A2AClientError` / the broad `except Exception` around
+# the dispatch call) -- internal-document questions answer normally, only
+# comparisons against named outside vendors lose that source and answer from
+# whatever internal evidence exists, or abstain if there's truly none.
+#
+# Free tier is 512MB RAM; the Docker image bakes in ~500MB of embedding/
+# rerank models (see deploy/Dockerfile) that load into memory on startup, so
+# expect this to be tight -- occasional restarts under load are the realistic
+# failure mode, not a hard crash on deploy. It also spins down after 15
+# minutes idle, so the first request after a quiet period takes 30-60s to
+# wake back up. Upgrading `plan: free` to `standard` below (and optionally
+# adding the a2a service back from git history) removes both limits once
+# you're ready to pay for it.
+#
+# Usage: in the Render dashboard, "New +" -> "Blueprint", point it at this
+# repo on the `feature/render-neon-deploy` branch. Fill in the `sync: false`
+# secrets it prompts for.
 #
 # After first deploy, run once against Neon (from your own machine, with
 # POSTGRES_URL pointed at Neon):
@@ -15,58 +36,15 @@
 # and run `python -m scripts.preflight --prod` before calling it live.
 
 services:
-  # Internal-only: the a2a-sdk server that does external web research. Not
-  # reachable from the public internet -- only research-agent-app calls it,
-  # over Render's private network. Private Services require a paid instance
-  # type (not the free plan); "starter" is the smallest that qualifies.
-  - type: pserv
-    name: research-agent-a2a
-    env: docker
-    dockerfilePath: ./deploy/Dockerfile.a2a
-    dockerContext: .
-    plan: starter
-    envVars:
-      - key: GROQ_API_KEY
-        sync: false
-      - key: GEMINI_API_KEY
-        sync: false
-      - key: TAVILY_API_KEY
-        sync: false
-      - key: GROQ_MODEL
-        value: llama-3.3-70b-versatile
-      - key: GEMINI_MODEL
-        value: gemini-3.5-flash
-      - key: GEMINI_JUDGE_MODEL
-        value: gemini-3.5-flash-lite
-      - key: LLM_TIER
-        value: groq
-
-  # Public: API + built UI, single origin. Bakes ~500MB of embedding/rerank
-  # models into the image (see deploy/Dockerfile) -- give this at least the
-  # "standard" plan; "starter"'s memory is tight once the model-resident
-  # process is warm.
+  # Public: API + built UI, single origin.
   - type: web
     name: research-agent-app
     env: docker
     dockerfilePath: ./deploy/Dockerfile
     dockerContext: .
-    plan: standard
+    plan: free
     healthCheckPath: /health
     envVars:
-      # --- Reach the private A2A service. Render exposes a private service's
-      # internal address here; confirm the exact host:port Render assigns
-      # (shown on the a2a service's page, under "Internal Address") the first
-      # time you deploy, in case the resolved value differs from this guess. ---
-      - key: EXTERNAL_AGENT_URL
-        fromService:
-          name: research-agent-a2a
-          type: pserv
-          property: hostport
-        # If Render's `hostport` doesn't already include a scheme, this needs
-        # to read like `http://<that value>` -- Blueprint syntax can't
-        # string-concat, so set the final `http://host:port` value by hand in
-        # the dashboard the first time and it will stick across redeploys.
-
       # --- Datastores: external, unmanaged. Paste real values in the dashboard. ---
       - key: POSTGRES_URL # Neon connection string, e.g. postgresql://user:pass@ep-xxx.neon.tech/dbname?sslmode=require
         sync: false
@@ -112,8 +90,6 @@ services:
       - key: GROQ_API_KEY
         sync: false
       - key: GEMINI_API_KEY
-        sync: false
-      - key: TAVILY_API_KEY
         sync: false
       - key: GROQ_MODEL
         value: llama-3.3-70b-versatile
