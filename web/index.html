@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Multi-agent research with citations, groundedness validation, and explicit abstention when evidence doesn't support an answer."
+    />
+    <meta name="color-scheme" content="light dark" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%232563eb%22 stroke-width=%222.2%22 stroke-linecap=%22round%22><circle cx=%2210.5%22 cy=%2210.5%22 r=%226.5%22/><path d=%22M15.3 15.3 21 21%22/></svg>"
+    />
+    <title>Enterprise Transformation Research Agent</title>
+    <script>
+      // Applied before React mounts, so the very first paint already has the
+      // right theme class -- otherwise a dark-mode user sees a flash of the
+      // light page while the bundle loads and theme.tsx's effect runs.
+      (function () {
+        var stored = localStorage.getItem("research-agent-theme");
+        var dark =
+          stored === "dark" ||
+          (stored !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+        if (dark) document.documentElement.classList.add("dark");
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

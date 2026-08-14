@@ -1,0 +1,38 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-slate-50 text-slate-900 antialiased dark:bg-neutral-950 dark:text-neutral-100;
+}
+
+@layer base {
+  /* Smooth light/dark switching app-wide: every element's own color/border/
+     background eases into the new theme instead of flipping instantly.
+     Lives in `base` deliberately -- a utility like `.transition-opacity`
+     (layer `utilities`, applied where a component wants its own specific
+     animation) still wins over this on `transition-property` for the
+     elements that declare it, since utilities are ordered after base. This
+     is only the fallback for everything that does not. */
+  *,
+  *::before,
+  *::after {
+    transition-property: background-color, border-color, color, fill, stroke, box-shadow;
+    transition-timing-function: ease;
+    transition-duration: 200ms;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0ms !important;
+  }
+}
+
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+  }
+}
