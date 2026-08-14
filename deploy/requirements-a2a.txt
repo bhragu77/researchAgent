@@ -1,0 +1,12 @@
+# Minimal dependency set for the A2A external-research agent.
+# Deliberately excludes torch / sentence-transformers / flashrank: this agent
+# searches and fetches, it does not embed or rerank.
+fastapi
+uvicorn[standard]
+pydantic-settings
+httpx
+a2a-sdk
+sse-starlette
+psycopg[binary]
+pgvector
+redis

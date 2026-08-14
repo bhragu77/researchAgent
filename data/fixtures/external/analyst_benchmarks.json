@@ -1,0 +1,20 @@
+[
+  {
+    "title": "Accounts Payable Automation: Realistic Benchmarks 2026",
+    "url": "https://www.gartner.com/en/research/ap-automation-benchmarks-2026",
+    "source": "Gartner Research",
+    "published": "2026-01-08",
+    "keywords": "invoice processing benchmark error rate straight-through automation market vendor claims",
+    "snippet": "Median achieved straight-through rate is 68%; vendor-published rates above 95% are rarely reproduced in heterogeneous supplier bases.",
+    "content": "Our 2026 survey of 240 enterprise finance functions finds a median achieved straight-through processing rate of 68 percent for AP automation deployments in their second year of operation, with an interquartile range of 54 to 79 percent. Vendor-published straight-through rates above 95 percent are rarely reproduced in production environments with heterogeneous supplier bases. Observed post-deployment exception rates cluster between 4 and 9 percent, materially above vendor marketing claims of under 1 percent. Organisations that completed process standardisation before deploying automation achieved straight-through rates 22 percentage points higher on average than those that did not."
+  },
+  {
+    "title": "Why RPA Pilots Fail in Procurement and Finance",
+    "url": "https://www2.deloitte.com/insights/rpa-pilot-failure-modes",
+    "source": "Deloitte Insights",
+    "published": "2025-10-22",
+    "keywords": "RPA pilot failure process variation standardisation automation finance procurement",
+    "snippet": "Process variation across regions is the single largest predictor of automation pilot decommissioning.",
+    "content": "Analysis of 96 robotic process automation pilots finds that process variation across regional operating units is the single largest predictor of pilot decommissioning within 18 months. Pilots deployed onto non-standardised processes were decommissioned at roughly three times the rate of those deployed after a standardisation programme. Governance capacity, rather than capital availability, was cited as the binding constraint on concurrent automation deployments in 61 percent of the programmes surveyed."
+  }
+]

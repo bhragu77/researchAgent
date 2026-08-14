@@ -1,0 +1,24 @@
+# HTTPS reverse proxy skeleton.
+# Caddy provisions and renews certificates automatically for a real domain.
+# TODO: replace with the production hostname.
+
+research.example.com {
+	encode gzip
+
+	# TODO: rate limiting and request size caps before this reaches the app.
+
+	handle /health {
+		reverse_proxy app:8000
+	}
+
+	handle {
+		reverse_proxy app:8000
+	}
+
+	# TODO: serve the built Vite bundle from web/dist at / and move the API
+	# under /api once the frontend exists.
+
+	log {
+		output stdout
+	}
+}

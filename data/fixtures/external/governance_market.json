@@ -1,0 +1,11 @@
+[
+  {
+    "title": "Human-in-the-Loop Requirements for Financial AI Systems",
+    "url": "https://www.pwc.com/gx/en/ai-governance-financial-controls",
+    "source": "PwC Regulatory Insights",
+    "published": "2025-11-15",
+    "keywords": "AI governance human review threshold financial approval audit compliance invoice",
+    "snippet": "Most large enterprises retain human approval gates for automated financial decisions above GBP 5,000-10,000.",
+    "content": "Survey evidence indicates that the majority of large enterprises retain human approval gates for automated financial decisions above a value threshold, most commonly set between GBP 5,000 and GBP 10,000. Audit log retention requirements of seven years are standard for ledger-affecting automated decisions. Ongoing model bias and error review typically adds between GBP 25,000 and GBP 40,000 per deployed model per year, a cost frequently absent from vendor business cases."
+  }
+]

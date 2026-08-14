@@ -1,0 +1,106 @@
+# Deployment stack for a single ~1 GB VM.
+#
+# Only three things run here: the API (which also serves the built UI), the A2A
+# agent, and the Cloudflare tunnel. Postgres, Redis and Langfuse are EXTERNAL —
+# pointed at by URL — because none of them fit alongside a ~500 MB model-resident
+# Python process on a micro instance.
+#
+# Local development can still run Postgres and Redis here via:
+#     docker compose --profile local-datastores up
+#
+# Usage:
+#     cp .env.example .env && $EDITOR .env
+#     docker compose -f deploy/docker-compose.yml up --build
+
+name: research-agent
+
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    restart: unless-stopped
+    env_file: [../.env]
+    environment:
+      # Reached over the compose network, not localhost — they are separate
+      # containers and therefore separate network namespaces.
+      EXTERNAL_AGENT_URL: http://a2a:8500
+      SERVE_UI: "true"
+      STATIC_DIR: web/dist
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    depends_on:
+      a2a:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 90s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          # Leaves headroom on a 1 GB VM for the A2A agent and the tunnel.
+          memory: 900M
+
+  a2a:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.a2a
+    restart: unless-stopped
+    env_file: [../.env]
+    # Not published to the host: only the app needs to reach it. Exposing it
+    # publicly would let anyone spend the search budget.
+    expose:
+      - "8500"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8500/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  # HTTPS without opening a port, buying a certificate, or running a reverse
+  # proxy: the tunnel dials out to Cloudflare, so the VM needs no inbound rule.
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      app:
+        condition: service_healthy
+    profiles: ["tunnel"]
+
+  # --- local development datastores (opt-in) --------------------------------
+  # Not used in the deployed stack: production points at Neon / Upstash.
+  postgres:
+    image: pgvector/pgvector:pg16
+    profiles: ["local-datastores"]
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: research
+      POSTGRES_PASSWORD: research
+      POSTGRES_DB: research
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U research"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    profiles: ["local-datastores"]
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6381}:6379"
+
+volumes:
+  pgdata:

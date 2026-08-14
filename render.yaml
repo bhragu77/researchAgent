@@ -1,0 +1,146 @@
+# Render Blueprint for the two-process stack (see deploy/docker-compose.yml
+# for the equivalent VM shape). Postgres and Redis are NOT defined here on
+# purpose -- the app already targets Neon (Postgres) and Upstash (Redis) as
+# external, unmanaged datastores; Render never sees them.
+#
+# Usage: push this file to the repo root, then in the Render dashboard choose
+# "New +" -> "Blueprint" and point it at this repo. Render creates both
+# services below; you then fill in the secret env vars flagged `sync: false`
+# in each service's Environment tab (Render will prompt for them).
+#
+# After first deploy, run once against Neon (from your own machine, with
+# POSTGRES_URL pointed at Neon):
+#   python -m scripts.ingest --reset
+#   python -m scripts.seed_metrics --reset
+# and run `python -m scripts.preflight --prod` before calling it live.
+
+services:
+  # Internal-only: the a2a-sdk server that does external web research. Not
+  # reachable from the public internet -- only research-agent-app calls it,
+  # over Render's private network. Private Services require a paid instance
+  # type (not the free plan); "starter" is the smallest that qualifies.
+  - type: pserv
+    name: research-agent-a2a
+    env: docker
+    dockerfilePath: ./deploy/Dockerfile.a2a
+    dockerContext: .
+    plan: starter
+    healthCheckPath: /health
+    envVars:
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: TAVILY_API_KEY
+        sync: false
+      - key: GROQ_MODEL
+        value: llama-3.3-70b-versatile
+      - key: GEMINI_MODEL
+        value: gemini-3.5-flash
+      - key: GEMINI_JUDGE_MODEL
+        value: gemini-3.5-flash-lite
+      - key: LLM_TIER
+        value: groq
+
+  # Public: API + built UI, single origin. Bakes ~500MB of embedding/rerank
+  # models into the image (see deploy/Dockerfile) -- give this at least the
+  # "standard" plan; "starter"'s memory is tight once the model-resident
+  # process is warm.
+  - type: web
+    name: research-agent-app
+    env: docker
+    dockerfilePath: ./deploy/Dockerfile
+    dockerContext: .
+    plan: standard
+    healthCheckPath: /health
+    envVars:
+      # --- Reach the private A2A service. Render exposes a private service's
+      # internal address here; confirm the exact host:port Render assigns
+      # (shown on the a2a service's page, under "Internal Address") the first
+      # time you deploy, in case the resolved value differs from this guess. ---
+      - key: EXTERNAL_AGENT_URL
+        fromService:
+          name: research-agent-a2a
+          type: pserv
+          property: hostport
+        # If Render's `hostport` doesn't already include a scheme, this needs
+        # to read like `http://<that value>` -- Blueprint syntax can't
+        # string-concat, so set the final `http://host:port` value by hand in
+        # the dashboard the first time and it will stick across redeploys.
+
+      # --- Datastores: external, unmanaged. Paste real values in the dashboard. ---
+      - key: POSTGRES_URL # Neon connection string, e.g. postgresql://user:pass@ep-xxx.neon.tech/dbname?sslmode=require
+        sync: false
+      - key: REDIS_URL # Upstash connection string, rediss://default:pass@xxx.upstash.io:6379
+        sync: false
+
+      # --- Auth ---
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_ALGORITHM
+        value: HS256
+      - key: JWT_ISSUER
+        value: research-agent
+      - key: JWT_AUDIENCE
+        value: research-api
+      - key: ENABLE_DEV_TOKEN_ENDPOINT
+        value: "false" # MUST be false once this is public -- see .env.example
+      - key: ENABLE_GUEST_MODE
+        value: "true"
+
+      # --- OAuth: update the provider consoles' redirect URIs to match the
+      # real onrender.com URL (or custom domain) once it's known. ---
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GITHUB_CLIENT_ID
+        sync: false
+      - key: GITHUB_CLIENT_SECRET
+        sync: false
+      - key: OAUTH_PUBLIC_BASE_URL
+        fromService:
+          name: research-agent-app
+          type: web
+          property: host
+      - key: OAUTH_FRONTEND_URL
+        fromService:
+          name: research-agent-app
+          type: web
+          property: host
+
+      # --- LLM providers ---
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: TAVILY_API_KEY
+        sync: false
+      - key: GROQ_MODEL
+        value: llama-3.3-70b-versatile
+      - key: GEMINI_MODEL
+        value: gemini-3.5-flash
+      - key: GEMINI_JUDGE_MODEL
+        value: gemini-3.5-flash-lite
+      - key: LLM_TIER
+        value: groq
+
+      # --- Serving ---
+      - key: SERVE_UI
+        value: "true"
+      - key: STATIC_DIR
+        value: web/dist
+      - key: CORS_ALLOW_ORIGINS
+        value: ""
+      - key: RATE_LIMIT_ENABLED
+        value: "true"
+      - key: ANSWER_CACHE_ENABLED
+        value: "true"
+
+      # --- Tracing (optional; app runs fine without it) ---
+      - key: LANGFUSE_PUBLIC_KEY
+        sync: false
+      - key: LANGFUSE_SECRET_KEY
+        sync: false
+      - key: LANGFUSE_HOST
+        value: https://cloud.langfuse.com

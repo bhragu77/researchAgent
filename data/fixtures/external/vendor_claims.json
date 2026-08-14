@@ -1,0 +1,20 @@
+[
+  {
+    "title": "IntelliVoice AP Automation — Product Benchmark Sheet",
+    "url": "https://www.example.com/intellivoice/benchmarks",
+    "source": "IntelliVoice (vendor marketing)",
+    "published": "2026-02-10",
+    "keywords": "invoice processing error rate straight-through automation AI accuracy vendor pilot",
+    "snippet": "IntelliVoice delivers 98% straight-through processing and a 0.4% exception error rate across deployments.",
+    "content": "IntelliVoice AP Automation delivers industry-leading results. Across our deployed customer base we achieve 98 percent straight-through processing on supplier invoices, with an exception error rate of just 0.4 percent. Customers typically reach full straight-through processing within eight weeks of deployment, with no process standardisation work required beforehand. Our machine learning models adapt automatically to supplier variation, eliminating the need for the lengthy process remediation programmes that traditional consultancies recommend. Average payback across our customer base is under six months."
+  },
+  {
+    "title": "AutoLedger Enterprise — Invoice Automation Accuracy Claims",
+    "url": "https://www.example.com/autoledger/accuracy",
+    "source": "AutoLedger (vendor marketing)",
+    "published": "2025-12-01",
+    "keywords": "invoice automation error rate accuracy vendor claims straight-through processing",
+    "snippet": "AutoLedger reports 96% touchless invoice processing and sub-1% error rates for mid-market finance teams.",
+    "content": "AutoLedger Enterprise reports 96 percent touchless invoice processing across its mid-market customer base, with error rates consistently below 1 percent. Deployment does not require prior process standardisation. Our customers report an average reduction in invoice processing cost of 78 percent within the first year of operation."
+  }
+]

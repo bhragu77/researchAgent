@@ -1,0 +1,34 @@
+# syntax=docker/dockerfile:1
+# A2A external-research agent. Separate image and separate process: the whole
+# point of the A2A seam is that this is reachable over the network as a peer,
+# not importable in-process.
+
+FROM python:3.11-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /srv
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends curl \
+ && rm -rf /var/lib/apt/lists/*
+
+# This agent does web search and fetch only — no embeddings, no reranking — so
+# it skips torch entirely and stays a small image.
+COPY deploy/requirements-a2a.txt ./requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY app ./app
+COPY data ./data
+
+RUN useradd --create-home --uid 10002 a2auser && chown -R a2auser:a2auser /srv
+USER a2auser
+
+EXPOSE 8500
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD curl -fsS http://127.0.0.1:8500/health || exit 1
+
+CMD ["uvicorn", "app.a2a.server:app", "--host", "0.0.0.0", "--port", "8500"]
