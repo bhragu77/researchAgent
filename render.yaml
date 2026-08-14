@@ -25,7 +25,6 @@ services:
     dockerfilePath: ./deploy/Dockerfile.a2a
     dockerContext: .
     plan: starter
-    healthCheckPath: /health
     envVars:
       - key: GROQ_API_KEY
         sync: false
