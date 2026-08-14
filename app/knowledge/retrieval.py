@@ -35,7 +35,15 @@ _TOKEN_RE = re.compile(r"[a-z0-9]+")
 def connect() -> psycopg.Connection:
     """Open a Postgres connection with the pgvector type adapter registered."""
     conn = psycopg.connect(get_settings().postgres_url)
-    register_vector(conn)
+    try:
+        register_vector(conn)
+    except psycopg.ProgrammingError:
+        # First-ever connection to a brand-new database: the `vector`
+        # extension hasn't been created yet, so there is no type to register.
+        # This is exactly the connection `create_schema` is about to use to
+        # run `CREATE EXTENSION IF NOT EXISTS vector;` -- every connection
+        # after that one registers normally.
+        logger.info("vector extension not yet installed; continuing without pgvector type adapter")
     return conn
 
 
