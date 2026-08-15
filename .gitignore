@@ -27,9 +27,8 @@ web/dist/
 .idea/
 .DS_Store
 
-# Runtime logs / generated indexes -- regenerable via `scripts.ingest`, not source
+# Runtime logs / generated caches -- regenerable, not source
 *.log
-data/indexes/*.pkl
 data/eval_cache/
 data/eval/online_failures.jsonl
 

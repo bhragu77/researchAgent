@@ -13,8 +13,10 @@ What gets provisioned:
 
 * a config row — model tier, rate quotas, tool allowlist;
 * the vector namespace — row-level on the shared `chunks` table, so this is the
-  tenant id itself rather than a created object (see isolation.namespace_for);
-* an empty per-tenant BM25 index slot, filled by `scripts/ingest.py --tenant`;
+  tenant id itself rather than a created object (see isolation.namespace_for).
+  Lexical (BM25) search is scoped the same way and builds itself from these
+  rows at query time (see `app.knowledge.retrieval._load_bm25_index`), so
+  there is nothing separate to provision for it;
 * seed metrics rows, scoped to the new tenant;
 * an API key (stored hashed) and a starter JWT.
 """
@@ -291,7 +293,7 @@ def offboard(tenant_id: str) -> dict[str, Any]:
 
     Every delete is keyed on this tenant_id, so no other tenant is affected.
     """
-    from app.knowledge.retrieval import CHUNKS_TABLE, bm25_index_path, connect
+    from app.knowledge.retrieval import CHUNKS_TABLE, _load_bm25_index, connect
 
     safe = validate_tenant_id(tenant_id)
     deleted: dict[str, Any] = {}
@@ -303,10 +305,11 @@ def offboard(tenant_id: str) -> dict[str, Any]:
             deleted[table] = cur.rowcount
         conn.commit()
 
-    path = bm25_index_path(safe)
-    if path.exists():
-        path.unlink()
-        deleted["bm25_index"] = str(path)
+    # The BM25 index is built from CHUNKS_TABLE and cached per-process (see
+    # `_load_bm25_index`) -- without this, a process that had already served
+    # a query for this tenant would keep answering from its cached copy of
+    # now-deleted rows until it happened to restart.
+    _load_bm25_index.cache_clear()
 
     # Redis keys for this tenant: rate-limit counters and cached answers.
     from app.providers.cache import purge_tenant

@@ -20,7 +20,6 @@ code path through it that yields a default.
 
 import functools
 import logging
-from pathlib import Path
 from typing import Any, Callable, TypeVar
 
 from app.tenancy.context import TenantIsolationError, get_context
@@ -138,11 +137,6 @@ def namespace_for(tenant_id: str, collection: str = "chunks") -> str:
     return f"{validate_tenant_id(tenant_id)}:{collection}"
 
 
-def bm25_index_name(tenant_id: str) -> str:
-    """Filename stem for a tenant's BM25 index."""
-    return f"{validate_tenant_id(tenant_id)}_bm25"
-
-
 def assert_same_tenant(evidence: list[dict[str, Any]], tenant_id: str | None = None) -> None:
     """Verify every evidence item belongs to the expected tenant.
 
@@ -164,10 +158,3 @@ def assert_same_tenant(evidence: list[dict[str, Any]], tenant_id: str | None = N
         raise TenantIsolationError(
             f"cross-tenant evidence detected for tenant {expected!r}: {offenders[:5]}"
         )
-
-
-def index_dir() -> Path:
-    """Directory holding per-tenant BM25 indexes."""
-    from app.config.settings import get_settings
-
-    return Path(get_settings().bm25_index_dir)

@@ -206,7 +206,6 @@ class Settings(BaseSettings):
 
     # --- Ingestion ---------------------------------------------------------
     corpus_dir: str = "data/corpus"
-    bm25_index_dir: str = "data/indexes"
     chunk_size_chars: int = 900
     chunk_overlap_chars: int = 150
 

@@ -1,9 +1,10 @@
-"""Corpus ingestion: markdown -> chunks -> pgvector + BM25 index.
+"""Corpus ingestion: markdown -> chunks -> pgvector.
 
 Reads `data/corpus/*.md` with YAML frontmatter (source, authority, date,
 version), chunks the body, embeds locally with all-MiniLM-L6-v2, and upserts
-into Postgres under the demo tenant. Also builds and persists the tenant's BM25
-index so lexical retrieval works without a query-time rebuild.
+into Postgres under the demo tenant. Lexical (BM25) retrieval builds itself
+from these same rows at query time -- see `retrieval._load_bm25_index` --
+so there is no separate index-build step here.
 
 Usage:
     python -m scripts.ingest
@@ -13,7 +14,6 @@ Usage:
 import argparse
 import hashlib
 import logging
-import pickle
 import re
 import sys
 from pathlib import Path
@@ -22,13 +22,7 @@ from typing import Any
 import yaml
 
 from app.config.settings import get_settings
-from app.knowledge.retrieval import (
-    CHUNKS_TABLE,
-    bm25_index_path,
-    connect,
-    embed_texts,
-    tokenize,
-)
+from app.knowledge.retrieval import CHUNKS_TABLE, connect, embed_texts
 from app.tenancy.isolation import validate_tenant_id
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
@@ -283,53 +277,13 @@ def purge_tenant_chunks(tenant: str) -> int:
     return deleted
 
 
-def build_bm25(tenant: str) -> int:
-    """Build and persist the tenant's BM25 index from what is in Postgres.
-
-    Reading back from the database rather than from the in-memory records keeps
-    the lexical index consistent with the vector store even across partial runs.
-    """
-    from rank_bm25 import BM25Okapi
-
-    with connect() as conn, conn.cursor() as cur:
-        cur.execute(
-            f"SELECT chunk_id, text, source, authority, date FROM {CHUNKS_TABLE} WHERE tenant = %s",  # noqa: S608
-            (tenant,),
-        )
-        rows = cur.fetchall()
-
-    if not rows:
-        logger.warning("no chunks for tenant %r; skipping BM25 index", tenant)
-        return 0
-
-    records = [
-        {
-            "chunk_id": r[0],
-            "text": r[1],
-            "source": r[2],
-            "authority": r[3],
-            "date": r[4],
-        }
-        for r in rows
-    ]
-    corpus = [tokenize(r["text"]) for r in records]
-
-    path = bm25_index_path(tenant)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("wb") as fh:
-        pickle.dump({"bm25": BM25Okapi(corpus), "records": records}, fh)
-
-    logger.info("persisted BM25 index (%d docs) to %s", len(records), path)
-    return len(records)
-
-
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Ingest a corpus into pgvector + BM25.")
+    parser = argparse.ArgumentParser(description="Ingest a corpus into pgvector.")
     parser.add_argument("--reset", action="store_true", help="drop and recreate the chunks table")
     parser.add_argument(
         "--tenant",
         default=None,
-        help="tenant to ingest under; its own vector rows and BM25 index",
+        help="tenant to ingest under; scopes its own vector rows",
     )
     parser.add_argument(
         "--corpus-dir",
@@ -345,7 +299,6 @@ def main() -> int:
     args = parser.parse_args()
 
     settings = get_settings()
-    # Validated, because the tenant id becomes part of the BM25 index filename.
     tenant = validate_tenant_id(args.tenant or settings.default_tenant)
     corpus_dir = Path(args.corpus_dir or settings.corpus_dir)
 
@@ -369,15 +322,13 @@ def main() -> int:
         return 1
 
     upsert(records)
-    indexed = build_bm25(tenant)
 
     logger.info(
-        "done: tenant=%s corpus=%s chunks=%d bm25_docs=%d bm25_index=%s",
+        "done: tenant=%s corpus=%s chunks=%d (lexical index builds itself from "
+        "these rows at query time, see retrieval._load_bm25_index)",
         tenant,
         corpus_dir,
         len(records),
-        indexed,
-        bm25_index_path(tenant),
     )
     return 0
 
