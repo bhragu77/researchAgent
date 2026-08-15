@@ -25,6 +25,14 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="Enterprise Transformation Research Agent",
     version="0.4.0",
+    description=(
+        "Multi-agent research API: decomposes a question, dispatches it across "
+        "internal-document, analytics, and external-web agents, fuses and cites "
+        "the evidence, and validates every claim before it ships. All endpoints "
+        "under `/v1` require a bearer JWT except `/v1/token` (dev only) and "
+        "`/v1/auth/*` (OAuth). See `docs/ARCHITECTURE.md` in the repository for "
+        "the full pipeline."
+    ),
 )
 
 # CORS. Deliberately not "*": credentials are bearer tokens, and a wildcard
@@ -78,7 +86,7 @@ def check_auth_config() -> None:
 
     from app.knowledge.retrieval import warm_pool
 
-    warm_pool()
+    warm_pool(timeout=25.0)
 
 
 @app.get("/health")
