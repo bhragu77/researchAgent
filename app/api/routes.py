@@ -21,7 +21,7 @@ import threading
 import uuid
 from typing import Any, Iterator
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from app.api.auth import PLATFORM_ROLES, Principal, issue_token, require_principal
@@ -35,6 +35,7 @@ from app.api.schemas import (
     EvidenceOut,
     FeedbackRequest,
     FeedbackResponse,
+    PdfUrlResponse,
     ResearchRequest,
     ResearchResponse,
     RetrievalSignals,
@@ -43,7 +44,7 @@ from app.api.schemas import (
 )
 from app.config.settings import get_settings
 from app.orchestration.graph import STAGE_LABELS, run_research, stream_research
-from app.providers import cache, rate_limit
+from app.providers import cache, rate_limit, storage
 from app.tenancy.context import TenantIsolationError
 from app.eval import online_sampler
 from app.tenancy.enrollment import enroll, get_tenant_config
@@ -513,6 +514,42 @@ def delete_session(
     deleted = persistence.delete_session(run_id, principal.tenant_id, user_id=scope_user)
     if not deleted:
         raise HTTPException(status_code=404, detail="session not found")
+
+
+_MAX_PDF_BYTES = 10 * 1024 * 1024  # generous for a text+vector report; catches abuse, not real reports
+
+
+@router.post("/sessions/{run_id}/pdf", response_model=PdfUrlResponse)
+async def upload_report_pdf(
+    run_id: str,
+    file: UploadFile = File(...),
+    principal: Principal = Depends(require_principal),
+) -> PdfUrlResponse:
+    """Store a browser-built report PDF and hand back a signed download link.
+
+    The PDF itself is generated client-side (web/src/pdfReport.ts) from data
+    the browser already has -- this endpoint only persists the finished file
+    somewhere shareable, so there is exactly one place that lays a report out.
+
+    404s exactly like GET/DELETE .../sessions/{run_id}: confirms the run
+    belongs to this caller's scope before accepting anything for it, rather
+    than trusting a client-supplied run_id at face value.
+    """
+    scope_user = None if principal.role in _TENANT_WIDE_SESSION_ROLES else principal.subject
+    if persistence.get_session_detail(run_id, principal.tenant_id, user_id=scope_user) is None:
+        raise HTTPException(status_code=404, detail="session not found")
+
+    pdf_bytes = await file.read()
+    if len(pdf_bytes) > _MAX_PDF_BYTES:
+        raise HTTPException(status_code=413, detail="pdf too large")
+
+    result = storage.upload_pdf(principal.tenant_id, run_id, pdf_bytes)
+    if result is None:
+        raise HTTPException(
+            status_code=503,
+            detail="PDF cloud storage is not configured yet",
+        )
+    return PdfUrlResponse(**result)
 
 
 # --- Phase 5: feedback + operational analytics -----------------------------

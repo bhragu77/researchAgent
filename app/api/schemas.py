@@ -295,3 +295,10 @@ class FeedbackResponse(BaseModel):
     rating: int
     comment: str | None = None
     ts: Any = None
+
+
+class PdfUrlResponse(BaseModel):
+    """A signed, time-limited download link for an uploaded report PDF."""
+
+    url: str
+    expires_in_hours: int

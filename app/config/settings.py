@@ -132,6 +132,18 @@ class Settings(BaseSettings):
     static_dir: str = "web/dist"
     serve_ui: bool = True
 
+    # --- Cloud storage: PDF report signed URLs ------------------------------
+    # Both empty means the feature is off and callers fall back to a local
+    # (in-browser) download -- see app.providers.storage. Signing a URL
+    # needs a private key, so this must be a service-account key's JSON
+    # content (not a path -- there is no guarantee of a writable filesystem
+    # to mount a file into on every host this runs on), pasted whole into
+    # one env var. Application Default Credentials (e.g. a GCP-hosted
+    # metadata-server identity) cannot sign a URL on their own.
+    gcs_bucket_name: str = ""
+    gcp_service_account_json: str = ""
+    pdf_signed_url_ttl_hours: int = 24
+
     # --- Observability (Phase 5) -------------------------------------------
     # Tracing is fail-open: an unreachable Langfuse degrades observability,
     # never the research run itself.

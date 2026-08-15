@@ -10,12 +10,13 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import type { ResearchResult } from "../api";
 import { CloseIcon, DownloadIcon } from "../icons";
-import { downloadReportPdf } from "../pdfReport";
+import { getReportPdf } from "../pdfReport";
 import { ReportDocument } from "./ReportDocument";
 
 export function ReportView({ result, onClose }: { result: ResearchResult; onClose: () => void }) {
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState("");
+  const [linkNote, setLinkNote] = useState(false);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -37,8 +38,10 @@ export function ReportView({ result, onClose }: { result: ResearchResult; onClos
   async function handleDownload() {
     setDownloading(true);
     setDownloadError("");
+    setLinkNote(false);
     try {
-      await downloadReportPdf(result);
+      const url = await getReportPdf(result);
+      setLinkNote(url !== null);
     } catch (e) {
       setDownloadError(e instanceof Error ? e.message : "Could not generate the PDF.");
     } finally {
@@ -67,6 +70,11 @@ export function ReportView({ result, onClose }: { result: ResearchResult; onClos
             <div className="flex items-center gap-2">
               {downloadError && (
                 <span className="text-xs text-rose-600 dark:text-rose-400">{downloadError}</span>
+              )}
+              {linkNote && (
+                <span className="text-xs text-emerald-600 dark:text-emerald-400">
+                  Link opened in a new tab — valid for 24h
+                </span>
               )}
               <button
                 onClick={handleDownload}

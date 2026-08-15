@@ -11,7 +11,7 @@
  * never downloads a report.
  */
 
-import type { ResearchResult } from "./api";
+import { uploadReportPdf, type ResearchResult } from "./api";
 
 // --- Palette (mirrors the app's Tailwind slate/emerald/amber/rose scale) ---
 const COLOR = {
@@ -363,8 +363,8 @@ function writeEvidence(w: PdfWriter, result: ResearchResult) {
   }
 }
 
-/** Build the full PDF report and trigger a download. */
-export async function downloadReportPdf(result: ResearchResult): Promise<void> {
+/** Build the full PDF report and return the jsPDF document, unsaved. */
+async function buildReportPdf(result: ResearchResult) {
   const { default: JsPDF } = await import("jspdf");
   const doc = new JsPDF({ unit: "pt", format: PAGE.size });
   const w = new PdfWriter(doc);
@@ -513,5 +513,51 @@ export async function downloadReportPdf(result: ResearchResult): Promise<void> {
     );
   }
 
+  return doc;
+}
+
+/** Build the report and save it straight to the browser's downloads. */
+export async function downloadReportPdf(result: ResearchResult): Promise<void> {
+  const doc = await buildReportPdf(result);
   doc.save(`research-report-${result.run_id || "untitled"}.pdf`);
+}
+
+/** Build the report and save the Blob without going through jsPDF's own
+ * download trigger -- used by `getReportPdf`'s local-download fallback so it
+ * can reuse a Blob it already built for the (failed) upload attempt. */
+function saveBlob(blob: Blob, filename: string): void {
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(link.href);
+}
+
+/** Get the user their report: a signed cloud link (opened in a new tab) when
+ * GCS is configured, or a normal local download when it isn't -- from the
+ * UI's point of view this is just "get me the PDF," it doesn't need to know
+ * which happened. Returns the signed URL when cloud storage was used, so a
+ * caller can show a "link valid for 24h" note; null on the local-download path.
+ */
+export async function getReportPdf(result: ResearchResult): Promise<string | null> {
+  const runId = result.run_id || "untitled";
+  const blob = await buildReportPdfBlob(result);
+
+  try {
+    const { url } = await uploadReportPdf(runId, blob);
+    window.open(url, "_blank");
+    return url;
+  } catch {
+    // Cloud storage not configured yet (503), or any other upload failure --
+    // either way the user still gets their file, just locally rather than
+    // via a shareable link.
+    saveBlob(blob, `research-report-${runId}.pdf`);
+    return null;
+  }
+}
+
+/** Build the report and return it as a Blob, for uploading rather than saving. */
+export async function buildReportPdfBlob(result: ResearchResult): Promise<Blob> {
+  const doc = await buildReportPdf(result);
+  return doc.output("blob");
 }

@@ -33,7 +33,7 @@ import {
   DownloadIcon,
   ShieldBanIcon,
 } from "../icons";
-import { downloadReportPdf } from "../pdfReport";
+import { getReportPdf } from "../pdfReport";
 import { ReportView } from "./ReportView";
 import { CoverageBarChart, PipelineTrace } from "./Visuals";
 
@@ -501,7 +501,7 @@ export function Answer({
   async function handleDownloadPdf() {
     setDownloadingPdf(true);
     try {
-      await downloadReportPdf(result);
+      await getReportPdf(result);
     } finally {
       setDownloadingPdf(false);
     }

@@ -407,6 +407,40 @@ export async function deleteSession(runId: string): Promise<void> {
   await request(`/sessions/${encodeURIComponent(runId)}`, { method: "DELETE" });
 }
 
+export interface PdfUrlResult {
+  url: string;
+  expires_in_hours: number;
+}
+
+/** Upload a browser-built report PDF and get back a signed, time-limited
+ * download link. Throws ApiError(503, ...) when cloud storage isn't
+ * configured yet -- callers should catch that specifically and fall back to
+ * `downloadReportPdf` (a normal local download) rather than surfacing it as
+ * a hard failure.
+ *
+ * Not routed through `request()`: that helper always sends
+ * `Content-Type: application/json`, which is wrong for a file upload -- the
+ * browser must set the multipart boundary itself. */
+export async function uploadReportPdf(runId: string, pdf: Blob): Promise<PdfUrlResult> {
+  const form = new FormData();
+  form.append("file", pdf, `research-report-${runId}.pdf`);
+
+  const headers: Record<string, string> = {};
+  if (session) headers["Authorization"] = `Bearer ${session.token}`;
+
+  const res = await fetch(`${BASE}/sessions/${encodeURIComponent(runId)}/pdf`, {
+    method: "POST",
+    headers,
+    body: form,
+  });
+  const text = await res.text();
+  const body = text ? JSON.parse(text) : {};
+  if (!res.ok) {
+    throw new ApiError(res.status, body.detail || `${res.status} ${res.statusText}`);
+  }
+  return body as PdfUrlResult;
+}
+
 /** Run a research query. Note: no tenant_id in the body, by design.
  * `domain` is a UI picker hint (see domains.ts) — the server's own keyword
  * classifier decides the real domain regardless of what is sent here.

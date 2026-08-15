@@ -3,6 +3,7 @@
 # API
 fastapi
 uvicorn[standard]
+python-multipart
 
 # Orchestration
 langgraph
@@ -32,3 +33,6 @@ flashrank
 
 # Agent interop
 a2a-sdk
+
+# Cloud storage (PDF report signed URLs)
+google-cloud-storage
