@@ -11,11 +11,13 @@ API key and no network.
 
 import logging
 import re
+from contextlib import AbstractContextManager
 from functools import lru_cache
 from typing import Any
 
 import psycopg
 from pgvector.psycopg import register_vector
+from psycopg_pool import ConnectionPool
 
 from app.config.settings import get_settings
 from app.knowledge.evidence import Evidence
@@ -30,9 +32,11 @@ _TOKEN_RE = re.compile(r"[a-z0-9]+")
 # --- infrastructure --------------------------------------------------------
 
 
-def connect() -> psycopg.Connection:
-    """Open a Postgres connection with the pgvector type adapter registered."""
-    conn = psycopg.connect(get_settings().postgres_url)
+def _configure_connection(conn: psycopg.Connection) -> None:
+    """Register the pgvector type adapter on a newly-created pooled connection.
+
+    Runs once per physical connection the pool opens, not once per checkout.
+    """
     try:
         register_vector(conn)
     except psycopg.ProgrammingError:
@@ -40,9 +44,62 @@ def connect() -> psycopg.Connection:
         # extension hasn't been created yet, so there is no type to register.
         # This is exactly the connection `create_schema` is about to use to
         # run `CREATE EXTENSION IF NOT EXISTS vector;` -- every connection
-        # after that one registers normally.
+        # the pool opens after that one registers normally.
         logger.info("vector extension not yet installed; continuing without pgvector type adapter")
-    return conn
+
+
+@lru_cache(maxsize=1)
+def _pool() -> ConnectionPool:
+    """The process-wide connection pool, created on first use.
+
+    Every `connect()` call used to pay a fresh TCP+TLS+SCRAM handshake --
+    reasonable on a local Postgres a few ms away, but Neon's endpoint is a
+    real network hop (AWS us-east-2), and that handshake alone measured
+    ~2.2s round-trip here regardless of whether the connection was "cold" or
+    the process's third connection in a row -- the cost is per-connection,
+    not per-idle-period. A single OAuth login calls `enroll()`, which alone
+    opens 4+ connections (schema check, tenant upsert, metrics seed, chunks
+    schema check) -- paid serially, that one login was costing 8-10+ seconds
+    before this fix. Reusing pooled connections turns all but the first few
+    into a checkout that costs microseconds.
+    """
+    return ConnectionPool(
+        get_settings().postgres_url,
+        min_size=2,
+        max_size=5,
+        configure=_configure_connection,
+        open=True,
+    )
+
+
+def warm_pool(timeout: float = 15.0) -> None:
+    """Block until the pool's minimum connections are actually established.
+
+    Called once at app startup (see app.main) so the ~2s-per-connection
+    handshake cost to a remote database is paid while the process is coming
+    up, not on whichever user's request happens to arrive first. Failure
+    here is logged, not raised -- a database that is briefly unreachable at
+    boot should not prevent the process from starting; the first real
+    request will simply pay the connection cost itself, same as before this
+    function existed.
+    """
+    try:
+        _pool().wait(timeout=timeout)
+    except Exception:
+        logger.warning("could not warm the database connection pool at startup", exc_info=True)
+
+
+def connect() -> AbstractContextManager[psycopg.Connection]:
+    """Check out a pooled Postgres connection with pgvector registered.
+
+    Drop-in replacement for what used to be a bare `psycopg.connect(...)`:
+    every existing call site already does `with connect() as conn, ...`,
+    which works identically here -- the pool's context manager commits on a
+    clean exit and rolls back on an exception, same as a raw connection's
+    own context manager did, except the connection is returned to the pool
+    afterward instead of being closed.
+    """
+    return _pool().connection()
 
 
 @lru_cache(maxsize=1)

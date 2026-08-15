@@ -76,6 +76,10 @@ def check_auth_config() -> None:
             "credentials without authenticating the caller. Disable in production."
         )
 
+    from app.knowledge.retrieval import warm_pool
+
+    warm_pool()
+
 
 @app.get("/health")
 def health() -> dict[str, str]:
