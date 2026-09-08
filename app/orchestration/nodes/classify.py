@@ -13,7 +13,7 @@ from app.orchestration.domain import resolve_domain
 from app.orchestration.state import ResearchState
 from app.prompts import load_prompt
 from app.providers.llm.base import LLMError
-from app.providers.llm.fallback import get_provider
+from app.providers.llm.fallback import get_fast_provider
 
 logger = logging.getLogger(__name__)
 
@@ -168,7 +168,7 @@ def classify_node(state: ResearchState) -> dict[str, Any]:
     conversation_context = state.get("conversation_context") or "none"
 
     try:
-        response = get_provider().complete(
+        response = get_fast_provider().complete(
             prompt.render(question=question, conversation_context=conversation_context), json_mode=True
         )
         classification = _coerce(response.data)

@@ -69,6 +69,22 @@ async def tenant_isolation_handler(request: Request, exc: TenantIsolationError) 
     )
 
 
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Last-resort catch-all so an unexpected error is still valid JSON.
+
+    Without this, Starlette's default handler renders a plain-text "Internal
+    Server Error" body. Every client here (web/src/api.ts) unconditionally
+    JSON.parses the response body, so a plain-text 500 doesn't surface as a
+    500 -- it surfaces as a confusing "Unexpected token 'I'" parse error that
+    hides the real failure. Individual routes may still catch specific
+    exceptions for a more precise status code; this only backstops whatever
+    they don't.
+    """
+    logger.exception("unhandled error on %s", request.url.path)
+    return JSONResponse(status_code=500, content={"detail": f"internal error: {exc}"})
+
+
 @app.on_event("startup")
 def check_auth_config() -> None:
     """Refuse to serve without a signing secret, and warn on dev endpoints.
@@ -87,6 +103,21 @@ def check_auth_config() -> None:
     from app.knowledge.retrieval import warm_pool
 
     warm_pool(timeout=25.0)
+
+    # research_trace/feedback/online_eval -- unlike the tenant and chunks
+    # schemas (created lazily inside enroll()), nothing else ever touches
+    # these tables before a query hits them. Creating them once here means a
+    # fresh database is ready before the first research run's persist step,
+    # not broken until someone remembers to run a migration by hand. Same
+    # failure posture as warm_pool above: a DB that's briefly unreachable at
+    # boot logs a warning rather than blocking startup -- the first real
+    # request pays this cost itself instead.
+    from app.telemetry.persistence import create_schema as create_telemetry_schema
+
+    try:
+        create_telemetry_schema()
+    except Exception:
+        logger.warning("could not create telemetry schema at startup", exc_info=True)
 
 
 @app.get("/health")

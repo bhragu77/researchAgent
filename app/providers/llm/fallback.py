@@ -30,6 +30,7 @@ from app.providers.llm.base import (
 from app.providers.llm.cache import CachingThrottledProvider
 from app.providers.llm.gemini import GeminiProvider
 from app.providers.llm.groq_open import GroqProvider
+from app.providers.llm.nvidia import NvidiaProvider
 from app.providers.llm import quota
 from app.telemetry import metrics, tracing
 
@@ -87,6 +88,16 @@ def groq_models() -> list[str]:
     return list(dict.fromkeys(m for m in configured if m))
 
 
+def nvidia_models() -> list[str]:
+    """Every distinct NVIDIA model in the chain, in priority order."""
+    settings = get_settings()
+    configured = [
+        settings.nvidia_model,
+        *[m.strip() for m in settings.nvidia_fallback_models.split(",") if m.strip()],
+    ]
+    return list(dict.fromkeys(m for m in configured if m))
+
+
 def default_chain(tier: str | None = None) -> list[LLMProvider]:
     """Build the provider chain for a tier.
 
@@ -97,13 +108,33 @@ def default_chain(tier: str | None = None) -> list[LLMProvider]:
     * `premium` — Gemini first, Groq behind it. Opt-in per tenant via the
       `model_tier` column, because Gemini's per-model daily caps make it
       unsuitable as a default.
+    * `nvidia` — NVIDIA's hosted reasoning model (`nvidia_model`) first, its
+      configured NVIDIA-side fallback model(s) next, then Groq and Gemini
+      behind those. Opt-in only: a separate free-tier bucket from the other
+      two, not a replacement for either.
     """
-    tier = (tier or get_settings().llm_tier).lower()
+    settings = get_settings()
+    tier = (tier or settings.llm_tier).lower()
     gemini = [GeminiProvider(model=m) for m in gemini_models()]
     groq = [GroqProvider(model=m) for m in groq_models()]
 
     if tier == "premium":
         return [*gemini, *groq]
+    if tier == "nvidia":
+        # Only the primary model gets the reasoning/"thinking" params -- the
+        # NVIDIA-side fallback model(s) run with the plain defaults, same as
+        # every other provider here.
+        primary = NvidiaProvider(
+            model=settings.nvidia_model,
+            temperature=1.0,
+            max_tokens=settings.nvidia_max_tokens,
+            reasoning_budget=settings.nvidia_reasoning_budget,
+            enable_thinking=True,
+        )
+        nvidia_fallbacks = [
+            NvidiaProvider(model=m) for m in nvidia_models() if m != settings.nvidia_model
+        ]
+        return [primary, *nvidia_fallbacks, *groq, *gemini]
     # Groq primary -> second Groq model -> Gemini as limited secondary.
     # Exhausting the chain falls through to the degraded path in `complete`.
     return [*groq, *gemini]
@@ -363,7 +394,32 @@ def get_judge_provider(tier: str | None = None) -> LLMProvider:
     return _judges[tier]
 
 
+_fast: dict[str, LLMProvider] = {}
+
+
+def get_fast_provider(tier: str | None = None) -> LLMProvider:
+    """Return the cheap, low-latency chain for classify and simple_answer.
+
+    Groq first regardless of tier -- same reasoning as `get_judge_provider`,
+    for the same underlying problem: both nodes run on every request (or, for
+    simple_answer, are the whole point of a "fast path") and neither does any
+    better work for a heavier or slower model. A tenant on the `nvidia` tier
+    still gets its reasoning model for `manager`/`synthesize` via
+    `get_provider`, where the extra depth is actually spent on something --
+    just not here, where it would only add 20+ seconds to a call whose own
+    docstring promises "one cheap LLM call".
+    """
+    tier = (tier or active_tier()).lower()
+    if tier not in _fast:
+        _fast[tier] = _wrap(
+            FallbackProvider([GroqProvider(), *[GeminiProvider(model=m) for m in gemini_models()]]),
+            f"fast:{tier}",
+        )
+    return _fast[tier]
+
+
 def reset_providers() -> None:
     """Drop cached chains so configuration changes take effect (tests, eval)."""
     _chains.clear()
     _judges.clear()
+    _fast.clear()

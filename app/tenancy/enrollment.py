@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 TENANTS_TABLE = "tenants"
 METRICS_TABLE = "metrics"
 
-VALID_TIERS = {"groq", "premium"}
+VALID_TIERS = {"groq", "premium", "nvidia"}
 
 # Default tool allowlist for a new tenant, mirroring the per-agent allowlist in
 # app.providers.tools.permissions.

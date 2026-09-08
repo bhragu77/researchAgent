@@ -22,7 +22,7 @@ from app.guardrails.pii import redact_answer
 from app.orchestration.state import ResearchState
 from app.prompts import load_prompt
 from app.providers.llm.base import LLMError
-from app.providers.llm.fallback import get_provider
+from app.providers.llm.fallback import get_fast_provider
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,7 @@ def simple_answer_node(state: ResearchState) -> dict[str, Any]:
     prompt = load_prompt("simple_answer")
 
     try:
-        response = get_provider().complete(prompt.render(question=question), json_mode=True)
+        response = get_fast_provider().complete(prompt.render(question=question), json_mode=True)
         answer_text = str(response.data.get("answer", "")).strip()
         answerable_directly = bool(response.data.get("answerable_directly", False)) and bool(
             answer_text

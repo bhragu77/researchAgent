@@ -90,11 +90,34 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     groq_api_key: str = ""
     gemini_model: str = "gemini-3.5-flash"
-    groq_model: str = "llama-3.3-70b-versatile"
+    # llama-3.3-70b-versatile and llama-3.1-8b-instant were retired from
+    # Groq's catalog (confirmed via a live models.list() call while chasing a
+    # latency bug -- every Groq call had been silently 404ing and falling
+    # through to Gemini). These are current, verified working as of the same
+    # check.
+    groq_model: str = "openai/gpt-oss-120b"
     # Second Groq model in the chain. Groq meters per model, so a distinct
     # model is a distinct bucket — the cheapest real headroom in the chain.
-    groq_fallback_models: str = "llama-3.1-8b-instant"
+    groq_fallback_models: str = "qwen/qwen3.6-27b"
     llm_timeout_seconds: float = 60.0
+
+    # NVIDIA's OpenAI-compatible endpoint (integrate.api.nvidia.com). Opt-in
+    # only via the "nvidia" model_tier -- not part of either default chain --
+    # since it is a separate free-tier bucket from Gemini/Groq, not a
+    # replacement for them.
+    nvidia_api_key: str = ""
+    nvidia_model: str = "nvidia/nemotron-3.5-lightning-30b-a3b"
+    # Same account, distinct models -- separate NVIDIA-side buckets. Tried in
+    # order before falling through to Groq/Gemini.
+    nvidia_fallback_models: str = "minimaxai/minimax-m3,meta/muse-glimmer-30b"
+    # Reasoning ("thinking") budget for the primary NVIDIA model, in tokens.
+    # This is the dominant latency lever for that model, not raw throughput:
+    # measured 36s at 16384, 2s at 256, roughly linear in between. The
+    # pipeline calls the primary provider several times per run (classify,
+    # manager, synthesize), so this cost multiplies -- kept modest by default
+    # so a full run stays in the tens-of-seconds range rather than minutes.
+    nvidia_reasoning_budget: int = 1024
+    nvidia_max_tokens: int = 3072
 
     # Default tier for classify / manager / judge / synthesis. Groq serves an
     # open-weight model with a far more generous free tier, so it is the
